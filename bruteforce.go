@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cheggaaa/pb"
+	_ "github.com/olekukonko/ts"
 )
 
 var (
