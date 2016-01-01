@@ -9,12 +9,12 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	//_ "net/http/pprof"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/cheggaaa/pb"
@@ -77,6 +77,10 @@ func checkResponse(resp *http.Response, req *http.Request) bool {
 }
 
 func main() {
+	// go func() {
+	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
+	// }()
+
 	flag.Parse()
 	if *appFilename == "" || *pwdFilename == "" {
 		fmt.Println("USAGE: ")
@@ -109,25 +113,29 @@ func main() {
 	bar.SetUnits(pb.Units(len(apps) * len(pwds)))
 	bar.Start()
 
-	barMu := new(sync.Mutex)
+	incProgress := make(chan struct{}, *parallel)
 	wait := new(sync.WaitGroup)
 	timeoutWait := new(sync.WaitGroup)
-	var timedout int32
-	reqCount := int32(0)
+	reqCount := 0
+
+	go func() {
+		for {
+			<-incProgress
+			bar.Increment()
+		}
+	}()
+
 	for _, appStr := range apps {
 		for _, password := range pwds {
-			if atomic.LoadInt32(&timedout) == 1 {
-				log.Println("Timed out, sleeping for a while.")
-				timeoutWait.Wait()
-			}
+			timeoutWait.Wait()
 
-			if atomic.LoadInt32(&reqCount) == int32(*parallel) {
+			if reqCount == *parallel {
 				wait.Wait()
-				atomic.StoreInt32(&reqCount, 0)
+				reqCount = 0
 			}
 
 			wait.Add(1)
-			atomic.AddInt32(&reqCount, 1)
+			reqCount++
 			go func(password, appStr string) {
 				defer wait.Done()
 				appID, err := strconv.Atoi(appStr)
@@ -143,10 +151,8 @@ func main() {
 
 				timeout := checkResponse(resp, req)
 				if timeout {
-					atomic.StoreInt32(&timedout, 1)
 					timeoutWait.Add(1)
 					defer timeoutWait.Done()
-					defer atomic.StoreInt32(&timedout, 0)
 				}
 
 				for timeout {
@@ -158,9 +164,7 @@ func main() {
 					timeout = checkResponse(resp, req)
 				}
 
-				barMu.Lock()
-				bar.Add(1)
-				barMu.Unlock()
+				incProgress <- struct{}{}
 			}(password, appStr)
 
 		}
