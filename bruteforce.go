@@ -150,7 +150,11 @@ func main() {
 				req := createRequest(password, appID)
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
-					log.Fatal(err)
+					fmt.Println("")
+					log.Println(err)
+					for err != nil {
+						resp, err = http.DefaultClient.Do(req)
+					}
 				}
 
 				timeout := checkResponse(resp, req)
