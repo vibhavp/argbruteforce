@@ -117,7 +117,7 @@ func main() {
 
 			wait.Add(1)
 			atomic.AddInt32(&reqCount, 1)
-			go func(password string) {
+			go func(password, appStr string) {
 				appID, err := strconv.Atoi(appStr)
 				if err != nil {
 					log.Fatal(err)
@@ -129,7 +129,7 @@ func main() {
 				}
 				checkResponse(resp, req)
 				wait.Done()
-			}(password)
+			}(password, appStr)
 
 		}
 	}
