@@ -25,6 +25,8 @@ var (
 	appFilename = flag.String("appfile", "", "App list file")
 	pwdFilename = flag.String("pwdfile", "", "Password list file")
 	parallel    = flag.Int("parallel", 10, "number of GETs to send at once")
+	mode        = flag.String("runas", "client", `Run as (valid value: "server", "client". Default: "client")`)
+	passwords   []string
 )
 
 func createRequest(password string, app int) *http.Request {
@@ -83,6 +85,13 @@ func main() {
 	// }()
 
 	flag.Parse()
+	if *mode == "server" {
+		startServer()
+		os.Exit(0)
+	} else if *mode == "server+client" {
+		go startServer()
+	}
+
 	if *appFilename == "" || *pwdFilename == "" {
 		fmt.Println("USAGE: ")
 		flag.PrintDefaults()
@@ -103,7 +112,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	pwds := strings.Split(string(pwdOutput), "\n")
+	passwords = strings.Split(string(pwdOutput), "\n")
 
 	log.Printf("Sending %d GETs at once.", *parallel)
 	bar := pb.New(len(apps))
@@ -111,7 +120,7 @@ func main() {
 	bar.ShowSpeed = true
 	bar.SetWidth(100)
 	bar.SetMaxWidth(100)
-	bar.SetUnits(pb.Units(len(apps) * len(pwds)))
+	bar.SetUnits(pb.Units(len(apps) * len(passwords)))
 	bar.Start()
 
 	incProgress := make(chan struct{}, *parallel)
@@ -127,7 +136,7 @@ func main() {
 	}()
 
 	for _, appStr := range apps {
-		for _, password := range pwds {
+		for _, password := range passwords {
 			timeoutWait.Wait()
 
 			if reqCount == *parallel {
