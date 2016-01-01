@@ -151,7 +151,7 @@ func main() {
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
 					fmt.Println("")
-					log.Println(err)
+					//log.Println(err)
 					for err != nil {
 						resp, err = http.DefaultClient.Do(req)
 					}
