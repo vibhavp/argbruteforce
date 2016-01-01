@@ -174,7 +174,7 @@ func main() {
 	bar.SetWidth(100)
 	bar.SetMaxWidth(100)
 	bar.SetUnits(pb.Units(len(apps) * len(passwords)))
-	//bar.Start()
+	bar.Start()
 
 	invalidPwd := make(chan string, *parallel)
 	incProgress := make(chan struct{}, *parallel)
