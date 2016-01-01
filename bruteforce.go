@@ -140,6 +140,9 @@ func main() {
 				defer wait.Done()
 				appID, err := strconv.Atoi(appStr)
 				if err != nil {
+					if appStr == "\n" {
+						return
+					}
 					log.Fatal(err)
 				}
 
@@ -172,5 +175,6 @@ func main() {
 
 	wait.Wait()
 	//bar.Set(len(apps) * len(pwds))
-	bar.FinishPrint("Finished")
+	bar.Finish()
+	log.Println("Finished!")
 }
