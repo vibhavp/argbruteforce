@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cheggaaa/pb"
 )
 
 var (
@@ -90,6 +92,14 @@ func main() {
 	}
 	pwds := strings.Split(string(pwdOutput), "\n")
 
+	bar := pb.New(len(apps))
+	bar.SetRefreshRate(time.Second)
+	bar.ShowSpeed = true
+	bar.SetWidth(100)
+	bar.SetMaxWidth(100)
+	bar.SetUnits(pb.Units(len(apps) * len(pwds)))
+	bar.Start()
+
 	for _, appStr := range apps {
 		for _, password := range pwds {
 			appID, err := strconv.Atoi(appStr)
@@ -103,6 +113,7 @@ func main() {
 			}
 			checkResponse(resp, req)
 		}
+		bar.Increment()
 	}
 
 }
