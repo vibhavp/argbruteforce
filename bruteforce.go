@@ -135,4 +135,5 @@ func main() {
 	}
 
 	wait.Wait()
+	bar.Set(len(apps) * len(pwds))
 }
