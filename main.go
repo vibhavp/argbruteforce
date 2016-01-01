@@ -85,8 +85,11 @@ func checkResponse(resp *http.Response, req *http.Request, appID int) (bool, boo
 			log.Println(err)
 			return false, true
 		}
-		u.Query().Set("pwd", req.URL.Query().Get("key"))
-		u.Query().Set("appID", strconv.Itoa(appID))
+		query := u.Query()
+		query.Set("pwd", req.URL.Query().Get("key"))
+		query.Set("appID", strconv.Itoa(appID))
+		u.RawQuery = query.Encode()
+
 		http.DefaultClient.Get(u.String())
 		return false, true
 	}
@@ -120,6 +123,13 @@ func main() {
 	log.SetFlags(log.Lshortfile)
 	flag.Parse()
 	if *mode == "server" {
+		pwdOutput, err := ioutil.ReadFile(*pwdFilename)
+		if err != nil {
+			log.Fatal(err)
+		}
+		passwords = strings.Split(string(pwdOutput), "\n")
+		log.Printf("Read %d passwords", len(passwords))
+
 		startServer()
 		os.Exit(0)
 	} else if *mode == "server+client" {
@@ -150,6 +160,7 @@ func main() {
 			log.Fatal(err)
 		}
 		passwords = strings.Split(string(pwdOutput), "\n")
+		log.Printf("Read %d passwords", len(passwords))
 	}
 
 	log.Printf("Sending %d GETs at once.", *parallel)
@@ -178,6 +189,7 @@ func main() {
 		donePwd := make(map[string]int)
 		for {
 			pwd := <-invalidPwd
+			wait.Add(1)
 			donePwd[pwd]++
 			if donePwd[pwd] == len(apps) && *serverURL != "" {
 				u, err := url.Parse(*serverURL)
@@ -185,9 +197,17 @@ func main() {
 					log.Println(err)
 				}
 				u.Path = "invalid"
-				u.Query().Set("pwd", pwd)
-				http.DefaultClient.Get(u.String())
+				values := u.Query()
+				values.Set("pwd", pwd)
+				u.RawQuery = values.Encode()
+
+				_, err = http.DefaultClient.Get(u.String())
+				if err != nil {
+					log.Println(err)
+				}
 			}
+
+			wait.Done()
 
 		}
 	}()
