@@ -90,9 +90,10 @@ func checkResponse(resp *http.Response, req *http.Request, appID int) (bool, boo
 		query.Set("appid", strconv.Itoa(appID))
 		u.RawQuery = query.Encode()
 
-		resp, _ := http.DefaultClient.Get(u.String())
-		bytes, _ := ioutil.ReadAll(resp.Body)
-		log.Println(string(bytes))
+		_, err = http.DefaultClient.Get(u.String())
+		if err != nil {
+			log.Println(err)
+		}
 		return false, true
 	}
 	return false, false
