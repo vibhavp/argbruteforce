@@ -56,12 +56,15 @@ func rateLimited() bool {
 	return resp.StatusCode != 200
 }
 
-func checkResponse(resp *http.Response, req *http.Request) {
+func checkResponse(resp *http.Response, req *http.Request) bool {
 	bytes, _ := ioutil.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
+		if resp.StatusCode == 408 {
+			return true
+		}
 		log.Printf("Errored on %s:\n ", req.URL.String())
 		log.Println(string(bytes))
-		return
+		return false
 	}
 
 	respJSON := make(map[string]interface{})
@@ -70,6 +73,7 @@ func checkResponse(resp *http.Response, req *http.Request) {
 		log.Printf("On %s with Referer %s", req.URL.String(), req.Header["Referer"][0])
 		log.Printf("Got a response!: %v", respJSON)
 	}
+	return false
 }
 
 func main() {
@@ -106,9 +110,11 @@ func main() {
 	bar.Start()
 
 	wait := new(sync.WaitGroup)
+	timeoutWait := new(sync.WaitGroup)
 	reqCount := int32(0)
 	for _, appStr := range apps {
 		for _, password := range pwds {
+			timeoutWait.Wait()
 			if atomic.LoadInt32(&reqCount) == int32(*parallel) {
 				wait.Wait()
 				atomic.StoreInt32(&reqCount, 0)
@@ -123,12 +129,28 @@ func main() {
 				if err != nil {
 					log.Fatal(err)
 				}
+
 				req := createRequest(password, appID)
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
 					log.Fatal(err)
 				}
-				checkResponse(resp, req)
+
+				timeout := checkResponse(resp, req)
+				if timeout {
+					timeoutWait.Add(1)
+					defer timeoutWait.Done()
+				}
+
+				for timeout {
+					time.Sleep(1 * time.Minute)
+					resp, err := http.DefaultClient.Do(req)
+					if err != nil {
+						log.Fatal(err)
+					}
+					timeout = checkResponse(resp, req)
+				}
+
 			}(password, appStr)
 
 		}
