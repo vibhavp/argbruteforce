@@ -70,6 +70,7 @@ func checkResponse(resp *http.Response, req *http.Request) bool {
 	respJSON := make(map[string]interface{})
 	err := json.Unmarshal(bytes, &respJSON)
 	if err == nil {
+		fmt.Println("")
 		log.Printf("On %s with Referer %s", req.URL.String(), req.Header["Referer"][0])
 		log.Printf("Got a response!: %v", respJSON)
 	}
