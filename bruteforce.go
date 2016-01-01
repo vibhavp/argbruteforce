@@ -13,11 +13,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
-
 	"sync"
-
 	"sync/atomic"
+	"time"
 
 	"github.com/cheggaaa/pb"
 	_ "github.com/olekukonko/ts"
