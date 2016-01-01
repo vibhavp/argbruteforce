@@ -109,6 +109,7 @@ func main() {
 	bar.SetUnits(pb.Units(len(apps) * len(pwds)))
 	bar.Start()
 
+	barMu := new(sync.Mutex)
 	wait := new(sync.WaitGroup)
 	timeoutWait := new(sync.WaitGroup)
 	var timedout int32
@@ -123,7 +124,6 @@ func main() {
 			if atomic.LoadInt32(&reqCount) == int32(*parallel) {
 				wait.Wait()
 				atomic.StoreInt32(&reqCount, 0)
-				bar.Add(*parallel)
 			}
 
 			wait.Add(1)
@@ -158,11 +158,15 @@ func main() {
 					timeout = checkResponse(resp, req)
 				}
 
+				barMu.Lock()
+				bar.Add(1)
+				barMu.Unlock()
 			}(password, appStr)
 
 		}
 	}
 
 	wait.Wait()
-	bar.Set(len(apps) * len(pwds))
+	//bar.Set(len(apps) * len(pwds))
+	bar.FinishPrint("Finished")
 }
