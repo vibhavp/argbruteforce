@@ -27,6 +27,7 @@ var (
 	parallel    = flag.Int("parallel", 10, "number of GETs to send at once")
 	mode        = flag.String("runas", "client", `Run as (valid value: "server", "client". Default: "client")`)
 	serverURL   = flag.String("url", "", "Server URL")
+	passwordMu  = new(sync.RWMutex)
 	passwords   []string
 )
 
@@ -215,7 +216,9 @@ func main() {
 		}
 	}()
 
+	passwordMu.RLock()
 	for _, password := range passwords {
+		passwordMu.RUnlock()
 		for _, appStr := range apps {
 			timeoutWait.Wait()
 
@@ -268,6 +271,7 @@ func main() {
 			}(password, appStr)
 
 		}
+		passwordMu.RLock()
 	}
 
 	wait.Wait()

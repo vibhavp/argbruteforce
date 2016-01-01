@@ -1,4 +1,4 @@
-//+build !windows !darwin
+//+build !windows !darwin !arm
 
 package main
 
@@ -116,6 +116,14 @@ func newEntry(w http.ResponseWriter, r *http.Request) {
 	resp := &http.Response{Status: "200 OK", StatusCode: http.StatusOK}
 	resp.Write(w)
 	log.Printf("New Entry - AppID: %d, Password: %s", appID, pwd)
+	passwordMu.Lock()
+	for i, passwd := range passwords {
+		if passwd == pwd {
+			passwords[i] = passwords[len(passwords)-1]
+			passwords = passwords[:len(passwords)-1]
+		}
+	}
+	passwordMu.Unlock()
 }
 
 func invalidEntry(w http.ResponseWriter, r *http.Request) {
