@@ -87,10 +87,12 @@ func checkResponse(resp *http.Response, req *http.Request, appID int) (bool, boo
 		}
 		query := u.Query()
 		query.Set("pwd", req.URL.Query().Get("key"))
-		query.Set("appID", strconv.Itoa(appID))
+		query.Set("appid", strconv.Itoa(appID))
 		u.RawQuery = query.Encode()
 
-		http.DefaultClient.Get(u.String())
+		resp, _ := http.DefaultClient.Get(u.String())
+		bytes, _ := ioutil.ReadAll(resp.Body)
+		log.Println(string(bytes))
 		return false, true
 	}
 	return false, false
