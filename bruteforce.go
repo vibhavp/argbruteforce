@@ -111,10 +111,15 @@ func main() {
 
 	wait := new(sync.WaitGroup)
 	timeoutWait := new(sync.WaitGroup)
+	var timedout int32
 	reqCount := int32(0)
 	for _, appStr := range apps {
 		for _, password := range pwds {
-			timeoutWait.Wait()
+			if atomic.LoadInt32(&timedout) == 1 {
+				log.Println("Timed out, sleeping for a while.")
+				timeoutWait.Wait()
+			}
+
 			if atomic.LoadInt32(&reqCount) == int32(*parallel) {
 				wait.Wait()
 				atomic.StoreInt32(&reqCount, 0)
@@ -138,8 +143,10 @@ func main() {
 
 				timeout := checkResponse(resp, req)
 				if timeout {
+					atomic.StoreInt32(&timedout, 1)
 					timeoutWait.Add(1)
 					defer timeoutWait.Done()
+					defer atomic.StoreInt32(&timedout, 0)
 				}
 
 				for timeout {
