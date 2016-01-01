@@ -1,4 +1,4 @@
-//+build !windows !darwin !arm
+//+build !windows
 
 package main
 

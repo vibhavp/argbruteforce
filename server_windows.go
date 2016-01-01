@@ -1,5 +1,6 @@
-//+build windows !linux darwin
+//+build !linux
 
+// for windows
 package main
 
 import (
