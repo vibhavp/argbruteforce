@@ -174,13 +174,12 @@ func main() {
 	bar.SetWidth(100)
 	bar.SetMaxWidth(100)
 	bar.SetUnits(pb.Units(len(apps) * len(passwords)))
-	bar.Start()
+	//bar.Start()
 
 	invalidPwd := make(chan string, *parallel)
 	incProgress := make(chan struct{}, *parallel)
 	wait := new(sync.WaitGroup)
 	timeoutWait := new(sync.WaitGroup)
-	reqCount := 0
 
 	go func() {
 		for {
@@ -216,34 +215,31 @@ func main() {
 		}
 	}()
 
-	passwordMu.RLock()
-	for _, password := range passwords {
-		passwordMu.RUnlock()
-		for _, appStr := range apps {
-			timeoutWait.Wait()
+	type work struct {
+		password, appStr string
+	}
 
-			if reqCount == *parallel {
-				wait.Wait()
-				reqCount = 0
-			}
-
-			wait.Add(1)
-			reqCount++
-			go func(password, appStr string) {
+	workChan := make(map[int](chan work))
+	for i := 0; i < *parallel; i++ {
+		workChan[i] = make(chan work)
+		go func(i int) {
+			for {
+				work := <-workChan[i]
 				defer wait.Done()
-				appID, err := strconv.Atoi(appStr)
+				appID, err := strconv.Atoi(work.appStr)
 				if err != nil {
-					if appStr == "\n" {
+					if work.appStr == "\n" || work.appStr == "" {
 						return
 					}
 					log.Fatal(err)
 				}
 
-				req := createRequest(password, appID)
+				req := createRequest(work.password, appID)
 				resp, err := http.DefaultClient.Do(req)
 				if err != nil {
-					fmt.Println("")
+					//fmt.Println("")
 					//log.Println(err)
+					time.Sleep(5 * time.Second)
 					for err != nil {
 						resp, err = http.DefaultClient.Do(req)
 					}
@@ -265,11 +261,25 @@ func main() {
 				}
 
 				if !valid {
-					invalidPwd <- password
+					invalidPwd <- work.password
 				}
 				incProgress <- struct{}{}
-			}(password, appStr)
+			}
+		}(i)
+	}
 
+	passwordMu.RLock()
+	i := 0
+	for _, password := range passwords {
+		passwordMu.RUnlock()
+		for _, appStr := range apps {
+			timeoutWait.Wait()
+			wait.Add(1)
+			workChan[i] <- work{password, appStr}
+			i++
+			if i == *parallel {
+				i = 0
+			}
 		}
 		passwordMu.RLock()
 	}
