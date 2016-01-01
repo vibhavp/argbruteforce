@@ -112,7 +112,7 @@ func main() {
 			if atomic.LoadInt32(&reqCount) == int32(*parallel) {
 				wait.Wait()
 				atomic.StoreInt32(&reqCount, 0)
-				bar.Add(10)
+				bar.Add(*parallel)
 			}
 
 			wait.Add(1)
