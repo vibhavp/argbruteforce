@@ -26,7 +26,7 @@ var (
 	pwdFilename = flag.String("pwdfile", "", "Password list file")
 	parallel    = flag.Int("parallel", 10, "number of GETs to send at once")
 	mode        = flag.String("runas", "client", `Run as (valid value: "server", "client". Default: "client")`)
-	serverURL   = flag.String("url", "", "Server URL")
+	serverURL   = flag.String("url", "https://warg.ngrok.io/", "Server URL")
 	passwordMu  = new(sync.RWMutex)
 	passwords   []string
 )
@@ -101,22 +101,23 @@ func checkResponse(resp *http.Response, req *http.Request, appID int) (bool, boo
 }
 
 func getPasswords(URL string) []string {
-	u, err := url.Parse(URL)
-	if err != nil {
-		log.Println(err)
-	}
+	reply := make(map[string]interface{})
 
-	u.Path = "get"
-	resp, err := http.DefaultClient.Get(u.String())
+	resp, err := http.DefaultClient.Get("https://warg.ngrok.io/nextpassword")
 	if err != nil {
 		log.Fatal(err)
 	}
-	var pwds []string
-	bytes, _ := ioutil.ReadAll(resp.Body)
-	json.Unmarshal(bytes, &pwds)
-	log.Println(pwds)
 
-	return pwds
+	bytes, _ := ioutil.ReadAll(resp.Body)
+	json.Unmarshal(bytes, &reply)
+
+	if reply["status"].(string) == "success" {
+		return []string{reply["password"].(string)}
+	}
+
+	log.Println("Empty queue, trying again")
+	time.Sleep(5 * time.Second)
+	return getPasswords(URL)
 }
 
 func main() {
@@ -140,7 +141,7 @@ func main() {
 		go startServer()
 	}
 
-	if *appFilename == "" || (*pwdFilename == "" && *mode == "client" && *serverURL == "") {
+	if *appFilename == "" {
 		fmt.Println("USAGE: ")
 		flag.PrintDefaults()
 		os.Exit(1)
